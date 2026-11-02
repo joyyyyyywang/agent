@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="__CSRF_TOKEN__">
+  <title>joyagent · 你的个人 Agent</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body data-provider="__PROVIDER_KIND__" data-shared="__SHARED_MODE__" data-view="chat">
+  <nav class="view-switcher" aria-label="功能切换">
+    <div role="tablist" aria-label="工作区功能">
+      <button id="view-chat" type="button" role="tab" aria-selected="true" aria-controls="chat-view" tabindex="0">对话</button>
+      <button id="view-news" type="button" role="tab" aria-selected="false" aria-controls="news-view" tabindex="-1">AI 资讯</button>
+      <button id="view-repositories" type="button" role="tab" aria-selected="false" aria-controls="repositories-view" tabindex="-1">源码仓库</button>
+      <button id="view-papers" type="button" role="tab" aria-selected="false" aria-controls="papers-view" tabindex="-1">论文</button>
+    </div>
+  </nav>
+  <aside id="chat-sidebar" class="sidebar">
+    <a class="brand" href="/" aria-label="joyagent 首页"><span class="mark">joy</span><span>joyagent<small>@Authored by jinyunwang</small></span></a>
+    <button id="conversation-new" class="conversation-new" type="button">＋ 新建会话</button>
+    <details id="conversation-drawer" class="conversation-drawer" open>
+      <summary title="展开或收起会话列表">会话列表</summary>
+      <div class="conversation-feedback"><p id="conversation-status" role="status">正在读取会话列表…</p><button id="conversation-retry" type="button">刷新列表</button></div>
+      <nav id="conversation-list" aria-label="历史会话"></nav>
+      <details class="session-advanced">
+        <summary>按会话编号打开</summary>
+        <label class="sr-only" for="session">会话编号</label>
+        <div class="session-row"><input id="session" maxlength="124" value="default" autocomplete="off"><button id="switch" type="button" title="打开会话编号" aria-label="打开会话编号">↵</button></div>
+        <p>兼容已有编号；会话记录会保留。</p>
+      </details>
+    </details>
+    <div class="local-status"><i></i> __RUNTIME_NOTE__</div>
+  </aside>
+  <main>
+    <section id="chat-view" class="chat-view" role="tabpanel" aria-labelledby="view-chat">
+    <header><div><span class="eyebrow">YOUR AGENT, YOUR RULES</span><h1 id="conversation-title">新会话</h1><p id="conversation-identity" class="conversation-identity" hidden>会话 ID：<code id="conversation-id" title="选中可复制会话 ID"></code></p><p id="model-note" class="model-note">__PROVIDER_NOTE__</p></div><div class="header-meta"><span id="model-label" class="badge" title="__PROVIDER_LABEL__">__PROVIDER_LABEL__</span><div class="agent-model-pickers"><div class="model-picker"><label for="backend">使用 Agent</label><select id="backend" aria-describedby="backend-note" disabled>__BACKEND_OPTIONS__</select></div><div class="model-picker"><label for="model">本轮模型</label><select id="model" aria-describedby="model-note">__MODEL_OPTIONS__</select></div></div></div></header>
+    <div id="archive-banner" class="archive-banner" hidden><span>此会话已归档，记录保留。恢复后可以继续对话和使用工具。</span><button id="conversation-restore" type="button">恢复此会话</button></div>
+    <p id="backend-note" class="backend-note" role="status">正在读取 Agent 列表…</p>
+    <details id="agent-status-panel" class="agent-status-panel">
+      <summary>运行中的 Agent <span id="agent-status-summary">点击查看</span></summary>
+      <div class="agent-status-content">
+        <div class="agent-status-toolbar"><p id="agent-status-scope">当前访客 · 当前工作区</p><button id="agent-status-refresh" type="button">刷新状态</button></div>
+        <div id="agent-status-metrics" class="agent-status-metrics"></div>
+        <div class="agent-status-table-wrap"><table class="agent-status-table"><caption class="sr-only">Agent 运行状态和会话数量</caption><thead><tr><th scope="col">Agent</th><th scope="col">状态</th><th scope="col">PID</th><th scope="col">会话数</th><th scope="col">常驻会话</th></tr></thead><tbody id="agent-status-rows"></tbody></table></div>
+        <p class="agent-status-help">会话数包含归档；同一会话使用过多个 Agent 时分别计入，总会话数去重。常驻会话是运行中的缓存，重启或回收后可从历史重建。JoyAgent 使用 Web 服务进程，无独立常驻会话。</p>
+        <p id="agent-status-feedback" class="agent-status-feedback" role="status">正在读取运行状态…</p>
+      </div>
+    </details>
+    <div id="messages" class="messages" aria-live="polite" aria-label="聊天记录"></div>
+    <div class="composer-wrap">
+      <div id="status" class="status" role="status">就绪</div>
+      <div id="steering-feedback" class="steering-feedback" role="status" aria-live="polite" hidden></div>
+      <form id="composer"><label class="sr-only" for="message">消息或执行中的补充指令</label><textarea id="message" aria-describedby="steering-feedback" placeholder="说说你想完成什么…" rows="2" maxlength="12000" required></textarea><div class="composer-bottom"><span>Enter 发送 · Shift + Enter 换行</span><button id="send" type="submit">发送 <span aria-hidden="true">↗</span></button></div></form>
+      <p class="footer-note">工具权限由服务所有者配置 · 重要结果请核实</p>
+    </div>
+    </section>
+    <section id="news-view" class="news-view" role="tabpanel" aria-labelledby="view-news" hidden>
+      <header class="news-header"><div><span class="eyebrow">AI NEWS &amp; UPDATES</span><h1>AI 资讯</h1><p id="news-schedule" class="news-intro">每 2 小时自动抓取，前 10 条展示热榜资讯，其余按发布时间倒序补足，最多保留 100 条。</p></div><button id="news-refresh" type="button">刷新列表</button></header>
+      <p id="news-status" class="news-status" role="status" aria-live="polite">打开此页后读取资讯。</p>
+      <div class="news-list-heading"><h2>热点与最新资讯</h2><span id="news-count"></span></div>
+      <div id="news-list" class="news-list"></div>
+      <p class="news-footer">点击标题在新窗口打开原网站。资讯由来源网站发布，请以原文为准。</p>
+    </section>
+    <section id="papers-view" class="news-view papers-view" role="tabpanel" aria-labelledby="view-papers" hidden>
+      <header class="news-header"><div><span class="eyebrow">HUGGING FACE COLLECTIONS</span><h1>论文</h1><p id="papers-schedule" class="news-intro">14 个研究方向，Agents 智能体精选 20 篇，每 2 小时自动更新。</p></div><button id="papers-refresh" type="button">刷新列表</button></header>
+      <section class="paper-collections" aria-labelledby="paper-directions-heading">
+        <div class="news-list-heading"><h2 id="paper-directions-heading">研究方向</h2><span>14 个社区合集</span></div>
+        <div class="paper-collection-grid">
+          <article class="paper-collection featured"><a class="paper-direction" href="#agents-papers">Agents 智能体 ↓</a><div><a href="https://huggingface.co/collections/Tempo14/agents" target="_blank" rel="noopener noreferrer">agents ↗</a><span>Tempo14 · 本页精选 20 篇</span></div></article>
+          <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/zzfive/infrastructure" target="_blank" rel="noopener noreferrer">AI Infra 基础设施 ↗</a><div><span>Infrastructure</span><span>zzfive</span></div></article>
+          <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/kevin1020/inference-acceleration" target="_blank" rel="noopener noreferrer">推理加速 ↗</a><div><span>Inference Acceleration</span><span>kevin1020</span></div></article>
+          <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/stereoplegic/reasoning" target="_blank" rel="noopener noreferrer">Reasoning 推理能力 ↗</a><div><span>Reasoning</span><span>stereoplegic</span></div></article>
+        </div>
+        <details class="paper-collections-more">
+          <summary><span class="paper-collections-expand">展开其余 10 个合集</span><span class="paper-collections-collapse">收起合集</span></summary>
+          <div class="paper-collection-grid">
+            <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/Testerpce/reinforcement-learning" target="_blank" rel="noopener noreferrer">强化学习 / 后训练 ↗</a><div><span>Reinforcement learning</span><span>Testerpce</span></div></article>
+            <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/tk0098/rag" target="_blank" rel="noopener noreferrer">RAG 检索增强 ↗</a><div><span>RAG</span><span>tk0098</span></div></article>
+            <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/minlik/multimodal" target="_blank" rel="noopener noreferrer">多模态 ↗</a><div><span>Multimodal</span><span>minlik</span></div></article>
+            <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/Uasonchen/video-generation" target="_blank" rel="noopener noreferrer">视频生成 ↗</a><div><span>Video Generation</span><span>Uasonchen</span></div></article>
+            <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/Testerpce/speech" target="_blank" rel="noopener noreferrer">语音 ↗</a><div><span>Speech</span><span>Testerpce</span></div></article>
+            <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/Akdusta/robotics-papers" target="_blank" rel="noopener noreferrer">机器人 / 具身智能 ↗</a><div><span>Robotics papers</span><span>Akdusta</span></div></article>
+            <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/zzfive/safety" target="_blank" rel="noopener noreferrer">AI 安全 ↗</a><div><span>safety</span><span>zzfive</span></div></article>
+            <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/Testerpce/synthetic-data" target="_blank" rel="noopener noreferrer">合成数据 ↗</a><div><span>Synthetic data</span><span>Testerpce</span></div></article>
+            <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/alexngai/automated-research" target="_blank" rel="noopener noreferrer">自动化科研 ↗</a><div><span>Automated Research</span><span>alexngai</span></div></article>
+            <article class="paper-collection"><a class="paper-direction" href="https://huggingface.co/collections/Testerpce/materials-and-structures" target="_blank" rel="noopener noreferrer">AI for Science：材料方向 ↗</a><div><span>Materials and structures</span><span>Testerpce</span></div></article>
+          </div>
+        </details>
+      </section>
+      <section id="agents-papers" class="agents-papers" aria-labelledby="agents-papers-heading">
+      <div class="news-list-heading"><h2 id="agents-papers-heading">Agents 智能体</h2><span id="papers-count"></span></div>
+      <p class="news-intro">优先选自 <a href="https://huggingface.co/collections/Tempo14/agents" target="_blank" rel="noopener noreferrer">Tempo14 的 agents 合集 ↗</a>。</p>
+      <p id="papers-status" class="news-status" role="status" aria-live="polite">打开此页后读取论文。</p>
+      <div id="papers-list" class="news-list"></div>
+      <p class="news-footer">标题保留原文并直达 arXiv。中文摘要为机器翻译，可展开查看英文原文；日期为论文发表日期。</p>
+      </section>
+    </section>
+    <section id="repositories-view" class="repositories-view" role="tabpanel" aria-labelledby="view-repositories" hidden>
+      <header class="repositories-header"><div><span class="eyebrow">AI SOURCE REPOSITORIES</span><h1>源码仓库</h1><p class="repositories-intro">按用途浏览 AI 项目及开发资源，点击卡片查看官方仓库。</p></div><span id="repository-count" class="repository-count">5 个类别 · 32 个项目</span></header>
+      <!-- REPOSITORY_CATALOG_START -->
+      <nav class="repository-categories" aria-label="源码仓库分类">
+        <a href="#repositories-category-harness">Agent Harness</a>
+        <a href="#repositories-category-inference">模型推理</a>
+        <a href="#repositories-category-frameworks">Agent 开发框架</a>
+        <a href="#repositories-category-infra">AI Infra</a>
+        <a href="#repositories-category-training">训练与微调</a>
+      </nav>
+      <section id="repositories-category-harness" class="repository-category" aria-labelledby="repositories-category-harness-title">
+        <div class="repository-category-heading"><h2 id="repositories-category-harness-title">Agent Harness</h2><span>10 个项目</span></div>
+        <p class="repository-category-intro">Agent 运行环境、编程与设备操作助手。</p>
+        <div class="repository-grid">
+          <a class="repository-card" href="https://github.com/openai/codex" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Codex</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">openai/codex</p>
+            <p class="repository-description">OpenAI 的终端编程 Agent，在本地代码库中协助开发。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>DeepSeek Harness</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">deepseek-ai/deepseek-harness</p>
+            <p class="repository-description">开发者预览版的插件化 Agent 框架，提供 Web 交互界面。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/MoonshotAI/kimi-code" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Kimi Code CLI</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">MoonshotAI/kimi-code</p>
+            <p class="repository-description">Kimi 官方终端编程 Agent 源码，支持代码编辑、命令执行和 MCP。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/zai-org/ZCode" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>ZCode</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">zai-org/ZCode</p>
+            <p class="repository-description">智谱官方编程 Agent Harness，包含桌面/Web 客户端及 Agent CLI、运行时与工具源码。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/zai-org/Open-AutoGLM" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Open-AutoGLM</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">zai-org/Open-AutoGLM</p>
+            <p class="repository-description">手机操作 Agent 框架源码，结合屏幕理解、任务规划和设备控制。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/anthropics/claude-code" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Claude Code（开发资源）</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">anthropics/claude-code</p>
+            <p class="repository-description">官方安装说明、插件示例与问题追踪；不包含完整核心源码。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/earendil-works/pi" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>pi</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">earendil-works/pi</p>
+            <p class="repository-description">可扩展的轻量 Agent Harness，包含终端界面与编码工具。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/OpenHands/OpenHands" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>OpenHands</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">OpenHands/OpenHands</p>
+            <p class="repository-description">自托管的编程 Agent 控制台，管理会话与自动化任务。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/Aider-AI/aider" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Aider</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">Aider-AI/aider</p>
+            <p class="repository-description">终端里的 AI 结对编程助手，支持代码库编辑与 Git 协作。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/SWE-agent/mini-swe-agent" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>mini-SWE-agent</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">SWE-agent/mini-swe-agent</p>
+            <p class="repository-description">面向命令行与代码修复的极简 Agent，便于研究运行循环。</p>
+          </a>
+        </div>
+      </section>
+      <section id="repositories-category-inference" class="repository-category" aria-labelledby="repositories-category-inference-title">
+        <div class="repository-category-heading"><h2 id="repositories-category-inference-title">模型推理</h2><span>7 个项目</span></div>
+        <p class="repository-category-intro">模型发布与部署资源、高吞吐推理服务和本地模型运行。</p>
+        <div class="repository-grid">
+          <a class="repository-card" href="https://github.com/MoonshotAI/Kimi-K2.5" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Kimi K2.5</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">MoonshotAI/Kimi-K2.5</p>
+            <p class="repository-description">模型资源与部署指南，含技术报告和调用示例；非完整训练源码。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/zai-org/GLM-5" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>GLM-5</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">zai-org/GLM-5</p>
+            <p class="repository-description">GLM-5 系列官方发布与部署资源，提供示例和模型下载入口，非完整训练源码。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/vllm-project/vllm" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>vLLM</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">vllm-project/vllm</p>
+            <p class="repository-description">面向大语言模型的高吞吐推理引擎，优化显存使用与服务效率。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/sgl-project/sglang" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>SGLang</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">sgl-project/sglang</p>
+            <p class="repository-description">服务大语言模型与多模态模型的高性能推理框架。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/ggml-org/llama.cpp" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>llama.cpp</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">ggml-org/llama.cpp</p>
+            <p class="repository-description">使用 C/C++ 实现大模型推理，适合本地运行和量化部署。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/ollama/ollama" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Ollama</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">ollama/ollama</p>
+            <p class="repository-description">下载、管理和运行模型，为本地应用提供模型调用接口。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/triton-inference-server/server" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Triton Inference Server</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">triton-inference-server/server</p>
+            <p class="repository-description">NVIDIA 的推理服务端，为云端和边缘部署提供统一服务。</p>
+          </a>
+        </div>
+      </section>
+      <section id="repositories-category-frameworks" class="repository-category" aria-labelledby="repositories-category-frameworks-title">
+        <div class="repository-category-heading"><h2 id="repositories-category-frameworks-title">Agent 开发框架</h2><span>4 个项目</span></div>
+        <p class="repository-category-intro">构建工具调用、多 Agent 协作和有状态工作流。</p>
+        <div class="repository-grid">
+          <a class="repository-card" href="https://github.com/openai/openai-agents-python" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>OpenAI Agents SDK</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">openai/openai-agents-python</p>
+            <p class="repository-description">多 Agent 工作流的 Python SDK，提供工具、交接和护栏。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/anthropics/claude-agent-sdk-python" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Claude Agent SDK</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">anthropics/claude-agent-sdk-python</p>
+            <p class="repository-description">Python Agent SDK 源码，通过 Claude Code 构建工具调用与多轮会话。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/langchain-ai/langchain" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>LangChain</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">langchain-ai/langchain</p>
+            <p class="repository-description">通过统一模型接口、工具和集成组件构建 Agent 与大模型应用。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/langchain-ai/langgraph" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>LangGraph</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">langchain-ai/langgraph</p>
+            <p class="repository-description">以图组织有状态 Agent，支持持久执行和人工介入。</p>
+          </a>
+        </div>
+      </section>
+      <section id="repositories-category-infra" class="repository-category" aria-labelledby="repositories-category-infra-title">
+        <div class="repository-category-heading"><h2 id="repositories-category-infra-title">AI Infra</h2><span>6 个项目</span></div>
+        <p class="repository-category-intro">模型与 Agent SDK、模型网关、分布式计算和服务部署。</p>
+        <div class="repository-grid">
+          <a class="repository-card" href="https://github.com/MoonshotAI/kimi-agent-sdk" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Kimi Agent SDK</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">MoonshotAI/kimi-agent-sdk</p>
+            <p class="repository-description">Go、Node.js 与 Python SDK 源码，以编程方式管理 Kimi Agent 会话。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/anthropics/anthropic-sdk-python" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Claude API Python SDK</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">anthropics/anthropic-sdk-python</p>
+            <p class="repository-description">Claude API 的官方 Python SDK，提供模型调用和工具辅助接口。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/BerriAI/litellm" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>LiteLLM</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">BerriAI/litellm</p>
+            <p class="repository-description">统一多家模型 API 的网关与 SDK，支持路由和成本追踪。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/ray-project/ray" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Ray</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">ray-project/ray</p>
+            <p class="repository-description">分布式 AI 计算引擎，为训练、数据处理和模型服务提供运行时。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/kserve/kserve" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>KServe</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">kserve/kserve</p>
+            <p class="repository-description">在 Kubernetes 上部署模型服务，支持多框架与分布式推理。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/bentoml/BentoML" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>BentoML</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">bentoml/BentoML</p>
+            <p class="repository-description">将模型与 AI 应用封装为推理 API、任务队列和服务管线。</p>
+          </a>
+        </div>
+      </section>
+      <section id="repositories-category-training" class="repository-category" aria-labelledby="repositories-category-training-title">
+        <div class="repository-category-heading"><h2 id="repositories-category-training-title">训练与微调</h2><span>5 个项目</span></div>
+        <p class="repository-category-intro">模型实现、参数高效微调与分布式训练。</p>
+        <div class="repository-grid">
+          <a class="repository-card" href="https://github.com/huggingface/transformers" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Transformers</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">huggingface/transformers</p>
+            <p class="repository-description">提供文本、视觉和音频模型实现，连接训练与推理生态。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/huggingface/trl" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>TRL</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">huggingface/trl</p>
+            <p class="repository-description">围绕语言模型后训练，提供监督微调和强化学习工具。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/hiyouga/LlamaFactory" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>LlamaFactory</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">hiyouga/LlamaFactory</p>
+            <p class="repository-description">统一多种语言与视觉语言模型的高效微调流程。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/axolotl-ai-cloud/axolotl" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>Axolotl</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">axolotl-ai-cloud/axolotl</p>
+            <p class="repository-description">可配置的大模型微调框架，支持参数高效微调与分布式训练。</p>
+          </a>
+          <a class="repository-card" href="https://github.com/deepspeedai/DeepSpeed" target="_blank" rel="noopener noreferrer">
+            <div class="repository-card-heading"><h3>DeepSpeed</h3><span aria-hidden="true">↗</span></div>
+            <p class="repository-slug">deepspeedai/DeepSpeed</p>
+            <p class="repository-description">优化大模型分布式训练与推理，提供并行和显存优化能力。</p>
+          </a>
+        </div>
+      </section>
+      <!-- REPOSITORY_CATALOG_END -->
+      <p class="repositories-footer">按用途分类，不代表排名。点击项目在新窗口打开官方仓库。</p>
+    </section>
+  </main>
+</body>
+</html>
