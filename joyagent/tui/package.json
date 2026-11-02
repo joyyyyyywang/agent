@@ -1,0 +1,10 @@
+{
+  "name": "joyagent-tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Optional pi-tui terminal channel for joyagent",
+  "engines": { "node": ">=22.19.0" },
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "dependencies": { "@earendil-works/pi-tui": "1.4.0" }
+}
