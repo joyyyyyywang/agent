@@ -1,0 +1,148 @@
+[agent]
+name = "joyagent"
+soul = "SOUL.md"
+policy = "policy.toml"
+skills_dir = "skills"
+workspace = "workspace"
+data_dir = "data"
+timezone = "Asia/Shanghai"
+
+[model]
+# 聊天通过 IdeaLab 使用 Qwen；自动路由及决策工具独立使用千问AI平台。
+# 离线演示需使用 Demo，并关闭 [routing] 和 [decision]。
+# 真实模型：openai / anthropic / ollama / deepseek / kimi / zhipu。
+provider = "openai"
+model = "qwen3.8-flash"
+# Web 手动模型选项；routing 开启时另提供默认的“自动选择”。
+choices = ["qwen3.8-flash", "qwen3.8-max", "bailian/glm-5.2"]
+# IdeaLab API Key 获授权后，可加入 "bailian/deepseek-v4.1-flash-1017"；当前密钥返回 403，默认不启用。
+base_url = "https://idealab.alibaba-inc.com/api/openai/v1"
+api_key_env = "IDEALAB_API_TOKEN"
+token_parameter = "max_tokens"
+timeout_seconds = 120
+max_tokens = 16384
+# 自己的环境变量密钥优先；否则读取本机与 provider、base_url 匹配的凭据。
+credentials_file = "~/.config/joyagent/idealab-credentials.toml"
+# OpenAI 及兼容服务：base_url 要包含 /v1。
+# base_url = "https://api.openai.com/v1"
+# api_key_env = "OPENAI_API_KEY"
+# deepseek / kimi / zhipu 已内置各自的地址、密钥变量名和 max_tokens 参数。
+# 换服务时替换整个 [model] 段并设置对应环境变量，完整示例见 README。
+# 思考模型建议 max_tokens = 16384，并适当增加 policy 的轮次时限和上下文预算。
+# 可选：thinking = "enabled" 或 "disabled"（仅这三家支持；部分模型不允许关闭）。
+
+[decision]
+# 独立的分类/是非/评分工具；不改变 [model] 的聊天模型和 choices。
+# 每次 decision_evaluate 都会真实调用模型服务，凭据仅由 owner 配置。
+enabled = true
+base_url = "https://maas.qianwenaiapi.com/compatible-mode/v1"
+model = "decision-model-preview"
+api_key_env = "QWENCLOUD_API_KEY"
+credentials_file = "~/.config/joyagent/qianwen-credentials.toml"
+timeout_seconds = 15
+
+[routing]
+# 每轮自动判断一次复杂度；仅 complex 且该类别概率达阈值时使用 Max。
+# 简单、不确定或决策接口失败时使用 Flash；两类统一使用 min_probability。
+# 两个聊天目标都使用 [model] 的 IdeaLab 网关及凭据。
+# 手选模型或 /tool、/tools 跳过路由；关闭 decision 前也须关闭 routing。
+enabled = true
+simple_model = "qwen3.8-flash"
+complex_model = "qwen3.8-max"
+min_probability = 0.8
+
+[execution]
+# 默认关闭；启用需要 Linux、bubblewrap、prlimit 及可用的 user/mount/pid/net namespace。
+# 不会退回宿主机执行。还需在 policy.toml 授权 command_run / script_run。
+enabled = false
+# none 默认断网；host 共用外层沙箱的网络、DNS 和 TLS 根证书，包括回环端口。
+# host 不继承代理变量或私有凭据；外层访问不了的域名在内部也不会恢复。
+network = "none"
+timeout_seconds = 10
+output_chars = 8000
+memory_mb = 256
+file_size_mb = 16
+# RLIMIT_NPROC，4–4096：fork 时按整个真实 UID 的进程/线程计数检查；不是单个任务的配额。
+# 默认仍为 16；共享服务需由管理员按账号已有负载显式配置。
+process_limit = 16
+
+[backends]
+resident_limit = 8 # 常驻 CLI 进程总上限；满额时回收最久未使用的空闲进程
+# 可选的原生 CLI Agent；显式安装后启用。Web 执行需要 Linux 隔离器和 execution.enabled。
+# 详见 docs/agent-backends.md；切换保留中立会话历史与当前浏览器工作区。
+default = "joyagent"
+# install_dir = "/absolute/path/to/agent-runtimes/v1"
+[backends.codex]
+enabled = false
+[backends.pi]
+enabled = false
+[backends.deepseek]
+enabled = false
+
+[memory]
+# 本地词元哈希向量维数，不是云端语义 embedding。
+vector_dimensions = 256
+
+[web]
+# local 为个人本机模式，只允许 IPv4 回环地址。
+mode = "local"
+# 团队部署需改为 shared，并配置以下两项；详见 docs/deploy-shared-web.md。
+# public_origin 必须是浏览器实际访问的 HTTPS origin，不含路径或末尾斜杠。
+# public_origin = "https://joyagent.example.internal"
+# session_dir = "shared-sessions"
+# 可选：shared 模式的额外代理 Host，默认不放行任何内部地址。
+proxy_hosts = []
+# 仅填写入口实际转发的规范 IP:端口，例如 ["172.16.0.10:8765"]；IPv6 如 ["[::1]:8765"]。
+# 不接受域名、通配符或 URL；不信任 X-Forwarded-Host / Forwarded。
+# public_origin 仍为浏览器 HTTPS origin；POST Origin、匿名会话及 CSRF 校验不变。
+# shared 模式免登录，按浏览器隔离数据；MCP 需显式 shared=true、sandbox=true。
+# session_dir 保存私有会话签名密钥，须放在 workspace 和 data_dir 之外；入口由平台提供 HTTPS。
+
+[news]
+# Web 的“AI 资讯”：AIhot 热榜前 10 条，其余由 AI 工具集和 AI Agent Store 按时间补足至 100 条。
+# 全服务共用一份缓存，随 Web 后台运行，不调用模型；关闭浏览器不影响定时更新。
+enabled = true
+interval_seconds = 7200
+
+[papers]
+# Web 的“论文”：14 个合集入口，仅 Agents 展示 20 篇精选论文，独立缓存，不调用 LLM API。
+enabled = true
+interval_seconds = 7200
+# 可选：管理员预装的离线英译中运行库，仅翻译摘要，标题保留原文；普通启动不下载依赖。
+# translation_runtime = "/opt/joyagent-paper-translator"
+
+[telegram]
+token_env = "TELEGRAM_BOT_TOKEN"
+# 只接收这些用户的私聊；为空时禁止启动通道。
+allowed_user_ids = []
+poll_timeout = 20
+
+[email]
+# 需显式启用，且配置发件人白名单；启动后会自动回复匹配的邮件。
+enabled = false
+imap_host = ""
+imap_port = 993
+smtp_host = ""
+smtp_port = 465
+smtp_security = "ssl"
+user_env = "AGENT_EMAIL_USER"
+password_env = "AGENT_EMAIL_PASSWORD"
+auth_token_env = "AGENT_EMAIL_TOKEN"
+# 发给 Agent 的邮件需要 X-JoyAgent-Token 请求头；仅凭 From 白名单无法验证身份。
+allowed_senders = []
+poll_interval = 30
+mailbox = "INBOX"
+initial_backlog = false
+
+# MCP 是独立的本地程序。只启用自己信任的 server。
+# 下面是项目自带演示 server；command/args 不经过 shell。
+# [mcp.servers.demo]
+# enabled = true
+# command = "python3"
+# args = ["/absolute/path/to/examples/mcp_server.py"]
+# timeout_seconds = 20
+# pass_env = ["HTTPS_PROXY"]
+# env = { SERVICE_TOKEN = "${MY_SERVICE_TOKEN}" }
+# 启用后还需在 policy.toml 的 tools.allow 加入 "mcp_demo_echo"。
+# 共享隔离示例：将 args 改为 []，增加 script = "/absolute/path/to/examples/mcp_server.py"、
+# sandbox = true、shared = true，同时启用 execution。详见 docs/deploy-shared-web.md。
