@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.env.*
+!.env.example
+data/
+workspace/
+dist/
+build/
+.DS_Store
+node_modules/
+credentials.toml
