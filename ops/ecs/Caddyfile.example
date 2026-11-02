@@ -1,0 +1,7 @@
+# Replace this reserved example name with your own public DNS name.
+# Keep it identical to the host in web.public_origin (without https:// here).
+agent.example.com {
+	# Caddy preserves the incoming Host and Origin for this HTTP upstream.
+	# Do not rewrite Host to 127.0.0.1:8765 or remove Origin.
+	reverse_proxy 127.0.0.1:8765
+}
