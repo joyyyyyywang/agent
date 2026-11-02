@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "joyagent"
+version = "0.1.0"
+description = "A small, inspectable six-layer personal agent"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+joyagent = "joyagent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["joyagent*"]
+
+[tool.setuptools.package-data]
+joyagent = ["static/*", "defaults/*.toml", "defaults/*.md", "defaults/skills/*/*.md", "tui/*.mjs", "tui/package.json", "tui/package-lock.json"]
