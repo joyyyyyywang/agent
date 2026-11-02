@@ -1,0 +1,12 @@
+{
+  "name": "joyagent-optional-agent-runtimes",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Explicitly installed external CLI runtimes; never installed during Web startup",
+  "dependencies": {
+    "node": "24.22.1",
+    "@openai/codex": "0.142.5",
+    "@earendil-works/pi-coding-agent": "1.3.0",
+    "@deepseek-ai/dsh": "0.2.1-rc.2"
+  }
+}
