@@ -1,0 +1,57 @@
+# ECS shared Web smoke test only: no paid models or background network fetches.
+# Copy to /etc/joyagent/agent.toml on a new installation, then replace the
+# reserved public_origin with the exact HTTPS origin served by Caddy.
+[agent]
+name = "joyagent"
+soul = "/opt/joyagent/SOUL.md"
+policy = "/etc/joyagent/policy.toml"
+skills_dir = "/opt/joyagent/skills"
+workspace = "/var/lib/joyagent/workspace"
+data_dir = "/var/lib/joyagent/data"
+timezone = "Asia/Shanghai"
+
+[model]
+provider = "demo"
+model = "demo"
+choices = ["demo"]
+
+[decision]
+enabled = false
+
+[routing]
+enabled = false
+
+[execution]
+enabled = false
+network = "none"
+
+[backends]
+default = "joyagent"
+resident_limit = 8
+
+[backends.codex]
+enabled = false
+[backends.pi]
+enabled = false
+[backends.deepseek]
+enabled = false
+
+[memory]
+vector_dimensions = 256
+
+[web]
+mode = "shared"
+public_origin = "https://agent.example.com"
+proxy_hosts = []
+session_dir = "/var/lib/joyagent/sessions"
+
+[news]
+enabled = false
+
+[telegram]
+allowed_user_ids = []
+
+[email]
+enabled = false
+
+[mcp.servers]
