@@ -1,0 +1,22 @@
+# Public IPv4 HTTPS with Caddy 2.11.7 and Let's Encrypt short-lived certificates.
+# Replace BOTH occurrences of 203.0.113.10 with your actual public IPv4 address.
+# This documentation-only address cannot receive a public certificate.
+# First test with the staging CA and separate storage as documented in
+# docs/deploy-aliyun-ecs.md; this file shows the production issuer.
+{
+	# IP clients may omit SNI. Also works when the public IP is NAT-mapped
+	# to a private ECS interface; do not bind to an IP absent from the NIC.
+	default_sni 203.0.113.10
+}
+
+https://203.0.113.10 {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+			profile shortlived
+		}
+	}
+
+	# Preserve the incoming Host and Origin for JoyAgent's same-origin checks.
+	reverse_proxy 127.0.0.1:8765
+}
