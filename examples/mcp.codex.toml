@@ -1,0 +1,96 @@
+# 2026-10-24：从本机 Codex 服务配置整理；不包含密钥、OAuth 状态或私人目录。
+# 此文件使用 joyagent 配置格式，所有服务默认关闭。
+# 将需要的 [mcp.servers.<name>] 段复制到自己的 agent.toml，补齐鉴权、安装依赖并按工具名授权。
+# HTTP MCP 可由可选的 mcp-remote stdio 桥接；先手动安装固定版本，普通启动不自动安装。
+# 例如 npm install --prefix /owner/tools mcp-remote@<已审核版本>；command 填实际 .bin/mcp-remote 路径。
+# 本模板的外部进程仅用于个人 local 模式；共享服务只接收明确配置的隔离 MCP。
+
+[mcp.servers.chrome-devtools]
+enabled = false
+command = "chrome-devtools-mcp"
+args = []
+
+[mcp.servers.ai-auto-collection]
+enabled = false
+# 在集团 npm registry 安装 @alife/mcp-auto-collection 后，填写其实际可执行入口。
+command = "REPLACE_WITH_INSTALLED_AUTO_COLLECTION_ENTRY"
+args = []
+# 原 Codex 配置只传入 PLUGIN_VERSION、TERM_PROGRAM、TERM_PROGRAM_VERSION 等客户端元信息。
+
+[mcp.servers.alibaba_code]
+enabled = false
+command = "mcp-remote"
+args = ["https://mcp.alibaba-inc.com/code/mcp", "--header", "Authorization:${AUTH_HEADER}"]
+env = { AUTH_HEADER = "Bearer ${ALIBABA_MCP_TOKEN}" }
+
+[mcp.servers.aone-km]
+enabled = false
+command = "mcp-remote"
+args = ["https://mcp.alibaba-inc.com/aone-km/mcp"]
+
+[mcp.servers.odps-mcp]
+enabled = false
+command = "mcp-remote"
+args = ["https://mcp.alibaba-inc.com/odps-mcp/mcp", "--header", "Authorization:${AUTH_HEADER}"]
+env = { AUTH_HEADER = "Bearer ${ALIBABA_MCP_TOKEN}" }
+
+[mcp.servers.stt-qa-ai-tools]
+enabled = false
+command = "mcp-remote"
+args = ["https://pre-mcp.alibaba-inc.com/stt-qa-ai-tools/mcp", "--header", "Authorization:${AUTH_HEADER}"]
+env = { AUTH_HEADER = "Bearer ${ALIBABA_MCP_TOKEN}" }
+
+[mcp.servers.yuque]
+enabled = false
+command = "mcp-remote"
+args = ["https://mcp.alibaba-inc.com/yuque/mcp", "--header", "Authorization:${AUTH_HEADER}"]
+env = { AUTH_HEADER = "Bearer ${ALIBABA_MCP_TOKEN}" }
+
+[mcp.servers.libra-abtest-mcp]
+enabled = false
+command = "mcp-remote"
+args = ["https://mcp.alibaba-inc.com/libra-abtest-mcp/mcp"]
+
+[mcp.servers.group-env]
+enabled = false
+command = "mcp-remote"
+args = ["https://mcp.alibaba-inc.com/group-env/mcp"]
+
+[mcp.servers.openaiDeveloperDocs]
+enabled = false
+command = "mcp-remote"
+args = ["https://developers.openai.com/mcp"]
+
+[mcp.servers.loghouse-mcp]
+enabled = false
+command = "mcp-remote"
+args = ["https://mcp.alibaba-inc.com/loghouse-mcp/mcp"]
+
+[mcp.servers.sunfire-mcp]
+enabled = false
+command = "mcp-remote"
+args = ["https://mcp.alibaba-inc.com/sunfire-mcp/mcp"]
+
+[mcp.servers.tpp-ci-mcp]
+enabled = false
+command = "mcp-remote"
+args = ["https://mcp.alibaba-inc.com/tpp-ci-mcp/mcp"]
+
+[mcp.servers.code]
+enabled = false
+# 与 alibaba_code 指向同一端点，按鉴权方式择一启用，避免重复工具。
+command = "mcp-remote"
+args = ["https://mcp.alibaba-inc.com/code/mcp"]
+
+[mcp.servers.computer-use]
+enabled = false
+# 原配置已禁用，依赖本机 Codex Computer Use.app；不适用于 Linux 共享服务。
+command = "REPLACE_WITH_LOCAL_COMPUTER_USE_ENTRY"
+args = ["mcp"]
+
+[mcp.servers.node_repl]
+enabled = false
+# 依赖桌面应用附带的 Node REPL、可信服务和浏览器桥接；不能仅复制路径后远端使用。
+command = "REPLACE_WITH_LOCAL_NODE_REPL_ENTRY"
+args = []
+timeout_seconds = 120
