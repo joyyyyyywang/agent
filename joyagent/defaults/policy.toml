@@ -1,0 +1,30 @@
+[tools]
+# 白名单在工具调用前强制检查。deny 优先级高于 allow。
+# 支持通配符；建议对外部 MCP 工具逐项授权。
+# 默认不授权命令/脚本。启用隔离执行器后可按需加入 command_run、script_run。
+allow = [
+  "time_now",
+  "decision_evaluate",
+  "workspace_list", "workspace_read", "workspace_write",
+  "memory_remember", "memory_search", "memory_forget",
+  "skills_list", "skills_read",
+]
+deny = []
+
+[limits]
+max_steps = 8
+max_tool_calls = 16
+tool_timeout_seconds = 20
+turn_timeout_seconds = 120
+max_input_chars = 12000
+context_chars = 48000
+# 当前输入和执行记录之外，最多携带同一会话最近两轮历史。
+context_turns = 2
+history_messages = 80
+tool_output_chars = 10000
+
+[behavior]
+instructions = [
+  "优先使用简体中文，说明执行结果和必要限制。",
+  "涉及凭据的内容不写入长期记忆。",
+]
