@@ -1,0 +1,31 @@
+# Install as /etc/systemd/system/joyagent.service after preparing the paths.
+# Run Python directly: ops/shared_service.py start is a separate supervisor.
+[Unit]
+Description=JoyAgent shared Web
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=joyagent
+Group=joyagent
+WorkingDirectory=/opt/joyagent
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -m joyagent --config /etc/joyagent/agent.toml web --host 127.0.0.1 --port 8765
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+UMask=0077
+StateDirectory=joyagent
+StateDirectoryMode=0700
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/joyagent
+
+[Install]
+WantedBy=multi-user.target
