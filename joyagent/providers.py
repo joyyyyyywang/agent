@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import http.client
 import json
 import math
 import re
@@ -18,6 +19,7 @@ from .credentials import resolve_api_key
 from .types import Message, ModelReply, Provider, ProviderError, ToolCall, ToolSpec
 
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+MAX_ERROR_BYTES = 16 * 1024
 MAX_REASONING_BYTES = 128 * 1024
 
 # Model IDs remain explicit configuration: these are protocol defaults, not model
@@ -45,8 +47,10 @@ PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
 
 
 def _http_category(code: int) -> str:
-    if code in {401, 403}:
+    if code == 401:
         return "auth"
+    if code == 403:
+        return "permission"
     if code == 402:
         return "quota"
     if code == 429:
@@ -54,6 +58,27 @@ def _http_category(code: int) -> str:
     if code in {400, 404}:
         return "configuration"
     return "upstream" if 500 <= code <= 599 else "http"
+
+
+def _http_error_category(url: str, error: urllib.error.HTTPError) -> str:
+    category = _http_category(error.code)
+    # IdeaLab reports its per-window request limit as 403 / IRC-001.
+    # Scope this exception to that gateway, and inspect only a bounded JSON
+    # code; neither error messages nor arbitrary response text are trusted.
+    if error.code != 403 or urllib.parse.urlsplit(url).hostname != "idealab.alibaba-inc.com":
+        return category
+    try:
+        raw = error.read(MAX_ERROR_BYTES + 1)
+        if len(raw) > MAX_ERROR_BYTES:
+            return category
+        data = json.loads(raw)
+    except (OSError, ValueError, RecursionError, http.client.HTTPException):
+        return category
+    if isinstance(data, dict):
+        detail = data.get("error") if isinstance(data.get("error"), dict) else data
+        if detail.get("code") == "IRC-001":
+            return "rate_limit"
+    return category
 
 
 def _connection_category(exc: Exception) -> str:
@@ -86,9 +111,12 @@ def _post_json(url: str, payload: dict, headers: dict, timeout: float) -> dict:
             raw = response.read(MAX_RESPONSE_BYTES + 1)
     except urllib.error.HTTPError as exc:
         code = exc.code
-        exc.close()
+        try:
+            category = _http_error_category(url, exc)
+        finally:
+            exc.close()
         raise ProviderError(f"模型接口返回 HTTP {code}；请检查模型、地址、配额及 API Key。",
-                            category=_http_category(code)) from None
+                            category=category, http_status=code) from None
     except (OSError, urllib.error.URLError, ValueError) as exc:
         raise ProviderError("模型接口连接失败或超时；请检查 base_url、网络及 timeout_seconds。",
                             category=_connection_category(exc)) from None
