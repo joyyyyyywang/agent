@@ -10,8 +10,8 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Limits:
-    max_steps: int = 8
-    max_tool_calls: int = 16
+    max_steps: int = 16
+    max_tool_calls: int = 32
     tool_timeout_seconds: int = 20
     turn_timeout_seconds: int = 120
     max_input_chars: int = 12000
