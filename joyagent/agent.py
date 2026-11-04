@@ -14,6 +14,7 @@ from typing import Any
 
 from .config import Config
 from .policy import Policy
+from .progress import report_progress
 from .tools import ToolRegistry
 from .steering import SteeringConflictError, SteeringControl, validate_identifier
 from .types import AgentResult, Message, ModelReply, Provider, ProviderError, ToolCall, shared_provider_message
@@ -165,6 +166,7 @@ class Agent:
         self._sessions[session_id] = (lock, count + 1)
         try:
             async with lock:
+                report_progress("preparing")
                 direct = text.split(maxsplit=1)[0] in {"/tool", "/tools"}
                 delivery = steering_delivery or ("next_turn" if direct or getattr(turn_provider, "backend", None) else "next_step")
                 row = self.memory.get_conversation(session_id)
@@ -224,6 +226,7 @@ class Agent:
                         return stop("已达到本轮工具调用上限，补充指令未执行。")
                     control.consume(self.memory, session_id)
                 if provider_selector is not None:
+                    report_progress("routing")
                     recent = [message for turn in self._recent_turns(session_id) for message in turn]
                     provider, routing = await provider_selector(text, recent)
                     selected_backend = getattr(provider, "backend", None)
@@ -239,6 +242,7 @@ class Agent:
                         control.consume(self.memory, session_id)
                     if not backend:
                         steps += 1
+                    report_progress("agent" if backend else "model")
                     reply = await provider.complete(self._context(system, session_id), [] if backend else self.tools.specs())
                     if not isinstance(reply, ModelReply) or not isinstance(reply.provider_data, dict):
                         raise ValueError("Provider 返回格式错误")
@@ -360,7 +364,9 @@ class Agent:
                 output = {"ok": False, "code": "budget_exceeded", "error": "工具调用预算已耗尽，未执行"}
             else:
                 try:
+                    report_progress("tools")
                     output = await self.tools.execute(call.name, call.arguments)
+                    report_progress("tool_done" if output.get("ok") else "tool_failed")
                 except asyncio.CancelledError as exc:
                     interrupted = exc
                     output = {"ok": False, "code": "cancelled", "error": "等待工具时取消；外部操作结果需要核实"}
