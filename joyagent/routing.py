@@ -14,11 +14,13 @@ from .types import Message, ProviderError
 def routing_settings(config: Config) -> dict[str, Any] | None:
     """Validate routing choices without reading credentials or making requests."""
     raw = config.data.get("routing", {})
-    fields = {"enabled", "simple_model", "complex_model", "min_probability", "simple_min_probability"}
+    fields = {"enabled", "default_auto", "simple_model", "complex_model", "min_probability", "simple_min_probability"}
     if not isinstance(raw, dict) or set(raw) - fields:
         raise ValueError("routing 包含不支持的配置字段。")
     if type(raw.get("enabled", False)) is not bool:
         raise ValueError("routing.enabled 必须是布尔值。")
+    if type(raw.get("default_auto", True)) is not bool:
+        raise ValueError("routing.default_auto 必须是布尔值。")
     if not raw.get("enabled", False):
         return None
     choices = config.model_choices
@@ -37,7 +39,7 @@ def routing_settings(config: Config) -> dict[str, Any] | None:
     if type(threshold) not in (int, float) or not 0.5 <= threshold <= 1 or not math.isfinite(threshold):
         raise ValueError("routing.min_probability 必须是 0.5–1 的有限数字。")
     return {"enabled": True, "simple_model": simple, "complex_model": complex_model,
-            "min_probability": float(threshold)}
+            "min_probability": float(threshold), "default_auto": raw.get("default_auto", True)}
 
 
 def validate_routing(config: Config) -> dict[str, Any] | None:
