@@ -78,7 +78,7 @@ systemd 直接托管前台 Python，支持重启恢复和开机启动；不要�
 
 修改 `/etc/joyagent/agent.toml` 中现有的 `[model]`，配置可达的模型网关、准确模型 ID 和独立私有凭据文件，按 [README 模型配置](../README.md)填写。凭据目录权限为 700、文件为 600，归 `joyagent` 所有；不要放到源码、workspace 或网页里。先运行 `doctor`，重启后单独验收真实生成与工具调用；这一步会使用模型额度。
 
-当前仓库默认聊天使用 `idealab.alibaba-inc.com`，Decision 使用独立的 `maas.qianwenaiapi.com`。阿里云 ECS 不自动具备集团网络访问能力，须在目标 ECS 核实 DNS、HTTPS 可达性和账号授权。换网关时同步修改 `model`、`choices` 和自动路由目标；未验证 Decision 前保持 `[decision]`、`[routing]` 关闭。
+当前仓库的本机默认聊天和 Decision 统一使用百炼 Token Plan `token-plan.cn-beijing.maas.aliyuncs.com`，共用套餐凭据，自动路由关闭。本文共享 ECS 部署需单独配置允许共享的模型服务与凭据，不能复用个人 Token Plan 订阅。若选用 IdeaLab，阿里云 ECS 不自动具备集团网络访问能力，须在目标 ECS 核实 DNS、HTTPS 可达性和账号授权。换网关时同步修改 `model`、`choices` 和自动路由目标；未验证 Decision 前保持 `[decision]`、`[routing]` 关闭。
 
 共享 Web 免登录，匿名 Cookie 用来隔离数据。原沙箱的签名链接门禁不会随代码迁移到 ECS；真实模型服务若只供指定成员使用，需在 HTTPS 入口配置相应访问控制后启用。
 
