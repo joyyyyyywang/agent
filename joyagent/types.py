@@ -12,6 +12,7 @@ _SHARED_PROVIDER_MESSAGES = {
     "network": "暂时无法连接模型服务，请稍后重试或联系服务管理员。",
     "timeout": "模型服务响应超时，请稍后重试。",
     "auth": "模型服务认证失败，请联系服务管理员检查凭据。",
+    "permission": "模型服务拒绝访问，请联系服务管理员检查模型权限、凭据及访问策略。",
     "quota": "模型服务额度不足，请联系服务管理员。",
     "rate_limit": "模型服务请求过于频繁，请稍后重试。",
     "busy": "本地模型请求通道繁忙，请稍后重试。",
@@ -38,9 +39,10 @@ class ProviderError(RuntimeError):
     category may be reflected into shared conversations or durable history.
     """
 
-    def __init__(self, message: str, *, category: str | None = None):
+    def __init__(self, message: str, *, category: str | None = None, http_status: int | None = None):
         super().__init__(message)
         self.category = category if type(category) is str and category in _SHARED_PROVIDER_MESSAGES else None
+        self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
 
     @property
     def shared_message(self) -> str:
