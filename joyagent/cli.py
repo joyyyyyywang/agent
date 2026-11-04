@@ -47,10 +47,10 @@ def initialize(directory: str) -> int:
             handle.write(item.read_bytes())
     (root / "workspace").mkdir(exist_ok=True)
     print(f"已初始化：{root}\n运行：python -m joyagent --config {root / 'agent.toml'} chat")
-    print("默认自动路由：仅复杂且该类别概率至少 0.8 时使用 IdeaLab qwen3.8-max；简单、不确定或分类失败使用 qwen3.8-flash。聊天优先读取 IDEALAB_API_TOKEN，否则使用配置的 IdeaLab 私有凭据文件。")
-    print("独立决策工具使用千问 AI 平台；优先读取 QWENCLOUD_API_KEY，否则使用配置的千问私有凭据文件。")
+    print("默认聊天使用百炼 Token Plan deepseek-v4.1-flash，自动路由关闭。聊天优先读取 BAILIAN_TOKEN_PLAN_API_KEY，否则使用配置的百炼 Token Plan 私有凭据文件。")
+    print("独立决策工具同样使用百炼 Token Plan，与聊天共用 BAILIAN_TOKEN_PLAN_API_KEY 或配置的百炼 Token Plan 私有凭据文件。")
     print('离线使用请将整个 [model] 段替换为：\n[model]\nprovider = "demo"\nmodel = "demo"')
-    print("离线时请同时设置 [routing] enabled = false 和 [decision] enabled = false；启用自动路由或决策工具时仍需配置千问凭据。")
+    print("离线时请同时设置 [routing] enabled = false 和 [decision] enabled = false；启用自动路由或决策工具时仍需配置对应网关的凭据。")
     return 0
 
 
