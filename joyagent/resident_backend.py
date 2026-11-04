@@ -29,6 +29,7 @@ from .cli_backend import ExternalProvider, transcript
 from .cli_profiles import build_resident_profile
 from .cli_host import LoopbackBridge
 from .model_broker import ModelBroker, MAX_REPLAY_BYTES, MAX_REPLAY_ITEMS
+from .progress import report_progress
 from .native_cleanup import create_cleanup_task
 from .process_guard import ProcessGuardError, watch_process
 from .types import ModelReply, shared_provider_message
@@ -713,6 +714,7 @@ class _Worker:
                     if not isinstance(event, dict) or len(partial) >= 64:
                         raise ValueError("Agent 工具结果无效")
                     partial.append(event)
+                    report_progress("tool_done" if event.get("ok") is True else "tool_failed")
                     continue
                 if (record.get("type") != "result" or type(record.get("stopped")) is not bool
                         or not isinstance(record.get("text"), str)
