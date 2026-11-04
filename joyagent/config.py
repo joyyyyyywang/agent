@@ -86,7 +86,8 @@ class Config:
     @property
     def default_model_selection(self) -> str:
         from .routing import routing_settings
-        return "auto" if routing_settings(self) else self.select_model()["model"]
+        routing = routing_settings(self)
+        return "auto" if routing and routing["default_auto"] else self.select_model()["model"]
 
     def select_model_choice(self, value: str | None = None) -> str:
         selected = self.default_model_selection if value is None else self._model_id(value)
