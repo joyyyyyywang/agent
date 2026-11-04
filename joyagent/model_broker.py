@@ -15,6 +15,7 @@ import time
 import secrets
 from typing import Any
 
+from .progress import capture_progress
 from .providers import HTTPProvider, _post_json, _reasoning_content
 from .responses_bridge import ResponsesBridgeError
 from .types import ProviderError
@@ -29,7 +30,7 @@ _GLOBAL_CONNECTIONS = threading.BoundedSemaphore(GLOBAL_CONNECTION_LIMIT)
 _GLOBAL_MODEL_REQUESTS = threading.BoundedSemaphore(GLOBAL_MODEL_LIMIT)
 _LOG = logging.getLogger(__name__)
 _FAILURE_CATEGORIES = frozenset({
-    "dns", "tls", "network", "timeout", "auth", "quota", "rate_limit", "busy", "budget",
+    "dns", "tls", "network", "timeout", "auth", "permission", "quota", "rate_limit", "busy", "budget",
     "configuration", "upstream", "http", "credentials", "response",
 })
 _FAILURE_SOURCES = frozenset({"local_concurrency", "credentials", "upstream", "protocol", "budget"})
@@ -142,6 +143,7 @@ class ModelBroker:
         self.deadline = time.monotonic() + timeout
         self.transport = transport or _post_json
         self.calls = self.tool_calls = 0
+        self._progress = capture_progress()
         self.failure: str | None = None
         self._failure_logged = False
         self.active = True
@@ -231,6 +233,7 @@ class ModelBroker:
                 self.max_requests, self.max_tool_calls = max_requests, max_tool_calls
                 self.deadline = time.monotonic() + timeout
                 self.calls = self.tool_calls = 0
+                self._progress = capture_progress()
                 self.failure = None
                 self._failure_logged = False
                 self.lease_required = True
@@ -288,13 +291,17 @@ class ModelBroker:
         finally:
             self.inflight.release()
 
-    def _record_failure_locked(self, category: object, source: object) -> None:
+    def _record_failure_locked(self, category: object, source: object, *, http_status: object = None) -> None:
         """Called with self.lock; never log request content or exception text."""
         self.failure = category if type(category) is str and category in _FAILURE_CATEGORIES else "upstream"
         if not self._failure_logged:
             self._failure_logged = True
             safe_source = source if type(source) is str and source in _FAILURE_SOURCES else "protocol"
-            _LOG.warning("Native model request failed: category=%s source=%s", self.failure, safe_source)
+            if safe_source == "upstream" and type(http_status) is int and 100 <= http_status <= 599:
+                _LOG.warning("Native model request failed: category=%s source=%s http_status=%s",
+                             self.failure, safe_source, http_status)
+            else:
+                _LOG.warning("Native model request failed: category=%s source=%s", self.failure, safe_source)
 
     def _restore_reasoning(self, request: dict) -> None:
         """Called with the broker lock; no state from another model/turn is valid."""
@@ -382,6 +389,8 @@ class ModelBroker:
                 if not key and self.provider.requires_api_key:
                     raise ProviderError("缺少模型凭据", category="credentials")
                 failure_source = "upstream"
+                if self._progress is not None:
+                    self._progress("model")
                 completion = self.transport(self.provider.base_url + "/chat/completions", request,
                     {"Authorization": "Bearer " + key} if key else {},
                     max(.1, min(self.provider.timeout, self.deadline - time.monotonic())))
@@ -396,6 +405,8 @@ class ModelBroker:
                     self._record_failure_locked("budget", "budget")
                     raise ValueError("已达到本轮工具调用上限")
                 self.tool_calls += len(calls)
+                if self._progress is not None:
+                    self._progress("tools" if calls else "organizing")
             if responses:
                 from .responses_bridge import from_chat_response, encode_sse
                 response = from_chat_response(completion, request=body)
@@ -410,7 +421,7 @@ class ModelBroker:
                 "application/json", json.dumps(completion, ensure_ascii=False).encode())
         except ProviderError as exc:
             with self.lock:
-                self._record_failure_locked(exc.category or "upstream", failure_source)
+                self._record_failure_locked(exc.category or "upstream", failure_source, http_status=exc.http_status)
             raise
 
 
