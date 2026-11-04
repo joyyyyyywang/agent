@@ -12,8 +12,8 @@ allow = [
 deny = []
 
 [limits]
-max_steps = 8
-max_tool_calls = 16
+max_steps = 16
+max_tool_calls = 32
 tool_timeout_seconds = 20
 turn_timeout_seconds = 120
 max_input_chars = 12000
