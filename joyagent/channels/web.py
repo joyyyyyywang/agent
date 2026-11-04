@@ -22,6 +22,8 @@ from urllib.parse import parse_qs, urlsplit
 from .common import validate_input
 from .web_history import project_history, project_routing
 from .web_jobs import ChatJobs, JobBusyError, JobConflictError
+from .web_progress import ProgressStore
+from ..progress import TurnProgress, progress_scope
 from ..native_cleanup import cleanup_tasks
 from ..steering import SteeringConflictError, SteeringLimitError, validate_identifier
 
@@ -215,12 +217,14 @@ class AgentHTTPServer(ThreadingHTTPServer):
         self.csrf_token = secrets.token_urlsafe(32)
         self._request_slots = threading.BoundedSemaphore(64)
         self.chat_jobs = ChatJobs()
+        self.progress = ProgressStore()
         self.news = None
         self.papers = None
         super().__init__((host, address[1]), AgentHandler)
 
     def server_close(self) -> None:
         self.chat_jobs.close()
+        self.progress.close()
         if self.news is not None:
             self.news.close()
         if self.papers is not None:
@@ -346,12 +350,13 @@ class AgentHandler(BaseHTTPRequestHandler):
             "__PROVIDER_KIND__": provider,
             "__PROVIDER_LABEL__": label,
             "__PROVIDER_NOTE__": note,
+            "__MANUAL_MODEL__": config.select_model()["model"],
             "__SHARED_MODE__": "true" if self.server.shared else "false",
             "__RUNTIME_NOTE__": "共享服务 · 按浏览器隔离保存，清除 Cookie 或 7 天到期后进入新空间" if self.server.shared else "本地服务 · 数据保存在当前机器",
         }
         replacements = {marker: html.escape(value, quote=True) for marker, value in replacements.items()}
         replacements["__MODEL_OPTIONS__"] = "".join(
-            f'<option value="{html.escape(choice, quote=True)}"{" selected" if choice == model else ""}>'
+            f'<option value="{html.escape(choice, quote=True)}"{" selected" if choice == model else ""}{" hidden" if choice == "auto" else ""}>'
             f'{"自动选择（Decision）" if choice == "auto" else html.escape(choice)}</option>' for choice in config.model_selection_choices
         )
         replacements["__BACKEND_OPTIONS__"] = "".join(
@@ -411,7 +416,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                 content = files("joyagent").joinpath("static", name).read_bytes()
             self._send(200, content, content_type, headers)
             return
-        if parsed.path in {"/api/history", "/api/tools", "/api/backends", "/api/conversations", "/api/agents/status", "/api/chat/result", "/api/news", "/api/papers"}:
+        if parsed.path in {"/api/history", "/api/tools", "/api/backends", "/api/conversations", "/api/agents/status", "/api/chat/result", "/api/chat/progress", "/api/news", "/api/papers"}:
             session = None
             if self.server.shared:
                 session = self._require_session()
@@ -437,7 +442,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                         return
                     self._json(200, snapshot)
                     return
-                if parsed.path == "/api/chat/result":
+                if parsed.path in {"/api/chat/result", "/api/chat/progress"}:
                     query = parse_qs(parsed.query, keep_blank_values=True, max_num_fields=2)
                     if set(query) != {"session_id", "turn_id"} or any(len(value) != 1 for value in query.values()):
                         raise ValueError("结果查询需要 session_id 和 turn_id")
@@ -446,6 +451,10 @@ class AgentHandler(BaseHTTPRequestHandler):
                     validate_input("result", f"web:{session_id}")
                     turn_id = validate_identifier(query["turn_id"][0])
                     owner = session.user_id if self.server.shared else "local"
+                    if parsed.path == "/api/chat/progress":
+                        progress = self.server.progress.get(owner, session_id, turn_id)
+                        self._json(200, progress or {"status": "unavailable", "events": []})
+                        return
                     result = self.server.chat_jobs.get(owner, session_id, turn_id)
                     if result is None:
                         self._json(404, {"error": "本轮结果不可用，可能已过期或服务已重启；请打开会话历史核对，不要重复执行"})
@@ -672,6 +681,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                         return await self.server.bridge.runtime.delete_conversation_async(f"web:{session_id}")
                     self.server.bridge.call(delete_conversation())
                 self.server.chat_jobs.forget(owner, session_id)
+                self.server.progress.forget(owner, session_id)
                 self._json(200, {"session_id": session_id, "deleted": True})
                 return
             if set(data) != {"session_id", "archived"} or type(data["archived"]) is not bool:
@@ -715,7 +725,7 @@ class AgentHandler(BaseHTTPRequestHandler):
         server = self.server
         owner = session.user_id if server.shared else "local"
 
-        async def execute() -> dict[str, Any]:
+        async def execute_chat() -> dict[str, Any]:
             if server.shared:
                 result = await server.bridge.chat(owner, session_id, text, model=selected_model,
                                                   backend=selected_backend, **turn_options)
@@ -730,6 +740,20 @@ class AgentHandler(BaseHTTPRequestHandler):
                 else selected_model if selected_model != "auto" else None)
             return {**asdict(result), "routing": routing, "model": actual_model, "backend": actual_backend,
                     "backend_label": server.config.backend_label(actual_backend)}
+
+        async def execute() -> dict[str, Any]:
+            progress = (server.progress.begin(owner, session_id, turn_options["turn_id"])
+                        if turn_options else TurnProgress())
+            with progress_scope(progress):
+                try:
+                    result = await execute_chat()
+                    progress("stopped" if result.get("stopped") else "completed")
+                    if turn_options:
+                        result["progress"] = progress.snapshot()
+                    return result
+                except BaseException:
+                    progress("failed")
+                    raise
 
         if route == "/api/chat/start":
             receipt = server.chat_jobs.start(owner, session_id, turn_options["turn_id"],
