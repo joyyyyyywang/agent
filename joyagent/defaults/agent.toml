@@ -8,21 +8,20 @@ data_dir = "data"
 timezone = "Asia/Shanghai"
 
 [model]
-# 聊天通过 IdeaLab 使用 Qwen；自动路由及决策工具独立使用千问AI平台。
+# 聊天与决策工具统一使用百炼 Token Plan，聊天默认使用 DeepSeek Flash。
 # 离线演示需使用 Demo，并关闭 [routing] 和 [decision]。
 # 真实模型：openai / anthropic / ollama / deepseek / kimi / zhipu。
 provider = "openai"
-model = "qwen3.8-flash"
+model = "deepseek-v4.1-flash"
 # Web 手动模型选项；routing 开启时另提供默认的“自动选择”。
-choices = ["qwen3.8-flash", "qwen3.8-max", "bailian/glm-5.2"]
-# IdeaLab API Key 获授权后，可加入 "bailian/deepseek-v4.1-flash-1017"；当前密钥返回 403，默认不启用。
-base_url = "https://idealab.alibaba-inc.com/api/openai/v1"
-api_key_env = "IDEALAB_API_TOKEN"
+choices = ["deepseek-v4.1-flash", "qwen3.8-flash", "qwen3.8-max", "qwen3.7-plus", "glm-5.3", "glm-5.2"]
+base_url = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+api_key_env = "BAILIAN_TOKEN_PLAN_API_KEY"
 token_parameter = "max_tokens"
 timeout_seconds = 120
 max_tokens = 16384
 # 自己的环境变量密钥优先；否则读取本机与 provider、base_url 匹配的凭据。
-credentials_file = "~/.config/joyagent/idealab-credentials.toml"
+credentials_file = "~/.config/joyagent/bailian-token-plan-credentials.toml"
 # OpenAI 及兼容服务：base_url 要包含 /v1。
 # base_url = "https://api.openai.com/v1"
 # api_key_env = "OPENAI_API_KEY"
@@ -35,19 +34,19 @@ credentials_file = "~/.config/joyagent/idealab-credentials.toml"
 # 独立的分类/是非/评分工具；不改变 [model] 的聊天模型和 choices。
 # 每次 decision_evaluate 都会真实调用模型服务，凭据仅由 owner 配置。
 enabled = true
-base_url = "https://maas.qianwenaiapi.com/compatible-mode/v1"
+base_url = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
 model = "decision-model-preview"
-api_key_env = "QWENCLOUD_API_KEY"
-credentials_file = "~/.config/joyagent/qianwen-credentials.toml"
+api_key_env = "BAILIAN_TOKEN_PLAN_API_KEY"
+credentials_file = "~/.config/joyagent/bailian-token-plan-credentials.toml"
 timeout_seconds = 15
 
 [routing]
-# 每轮自动判断一次复杂度；仅 complex 且该类别概率达阈值时使用 Max。
-# 简单、不确定或决策接口失败时使用 Flash；两类统一使用 min_probability。
-# 两个聊天目标都使用 [model] 的 IdeaLab 网关及凭据。
-# 手选模型或 /tool、/tools 跳过路由；关闭 decision 前也须关闭 routing。
+# enabled 由管理员控制是否开放自动路由；用户可在网页上独立开关。
+# default_auto=false 表示首次打开默认使用手动模型；页面记住用户选择。
+# 复杂类别概率达到 min_probability 时使用 Qwen Max；两个目标均须位于 choices。
 enabled = true
-simple_model = "qwen3.8-flash"
+default_auto = false
+simple_model = "deepseek-v4.1-flash"
 complex_model = "qwen3.8-max"
 min_probability = 0.8
 
