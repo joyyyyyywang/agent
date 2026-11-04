@@ -5,6 +5,8 @@ const status = document.getElementById("status");
 const input = document.getElementById("message");
 const sessionInput = document.getElementById("session");
 const modelInput = document.getElementById("model");
+const routingToggle = document.getElementById("auto-routing");
+const routingHelp = document.getElementById("routing-help");
 const backendInput = document.getElementById("backend");
 const backendNote = document.getElementById("backend-note");
 const agentStatusPanel = document.getElementById("agent-status-panel");
@@ -18,14 +20,43 @@ let agentStatusValue = null;
 let agentStatusAuthFailed = false;
 const viewNames = ["chat", "news", "repositories", "papers"];
 let currentView = "chat";
+const chatSidebar = document.getElementById("chat-sidebar");
+const sidebarToggle = document.getElementById("sidebar-toggle");
+const sidebarStorageKey = "joyagent.sidebar-collapsed";
+let sidebarCollapsed = false;
+try { sidebarCollapsed = localStorage.getItem(sidebarStorageKey) === "true"; } catch (_) {}
+function updateSidebar() {
+  if (!sidebarToggle) return;
+  chatSidebar.hidden = currentView !== "chat" || sidebarCollapsed;
+  document.body.dataset.sidebarCollapsed = String(sidebarCollapsed);
+  sidebarToggle.hidden = currentView !== "chat";
+  sidebarToggle.setAttribute("aria-expanded", String(!sidebarCollapsed));
+  const label = sidebarCollapsed ? "展开整个侧边栏" : "收起整个侧边栏";
+  const toggleLabel = document.getElementById("sidebar-toggle-label");
+  if (toggleLabel) toggleLabel.textContent = sidebarCollapsed ? "展开侧栏" : "收起侧栏";
+  sidebarToggle.setAttribute("aria-label", label);
+  sidebarToggle.title = label;
+}
+sidebarToggle?.addEventListener("click", () => {
+  sidebarCollapsed = !sidebarCollapsed;
+  try { localStorage.setItem(sidebarStorageKey, String(sidebarCollapsed)); } catch (_) {}
+  updateSidebar();
+});
+updateSidebar();
 const newsStatus = document.getElementById("news-status");
 const papersStatus = document.getElementById("papers-status");
 const newsSourceIds = new Set(["aibot", "aiagentstore", "aihot"]);
 const allowedModels = new Set(Array.from(modelInput.options, option => option.value));
+const defaultModel = modelInput.value;
+const manualAllowed = value => value !== "auto" && allowedModels.has(value);
+const defaultManualModel = manualAllowed(modelInput.dataset.defaultModel) ? modelInput.dataset.defaultModel
+  : Array.from(allowedModels).find(manualAllowed);
+let manualModel = manualAllowed(defaultModel) ? defaultModel : defaultManualModel;
 const shared = document.body.dataset.shared === "true";
 const storageKey = shared ? "joyagent.visitor.session" : "joyagent.session";
 const modelStorageKey = shared ? "joyagent.visitor.model" : "joyagent.model";
 const autoMigrationKey = modelStorageKey + ".auto-routing-v1";
+const manualModelStorageKey = modelStorageKey + ".manual-v1";
 const backendStoragePrefix = shared ? "joyagent.visitor.backend." : "joyagent.backend.";
 const knownBackendIds = new Set(["joyagent", "codex", "pi", "deepseek"]);
 const configuredBackends = new Set(Array.from(backendInput.options, option => option.value));
@@ -58,6 +89,10 @@ const conversationButtons = [];
 const drafts = new Map();
 const draftRevisions = new Map();
 const sessionRuns = new Map();
+const progressPanel = document.getElementById("turn-progress");
+let progressTimer = null;
+let progressRequest = null;
+let progressRun = null;
 const recoveredDrafts = new Map();
 let displayedMessages = [];
 const conversationState = document.getElementById("conversation-status");
@@ -85,17 +120,21 @@ try {
   }
 } catch (_) {}
 try {
-  if (allowedModels.has("auto") && localStorage.getItem(autoMigrationKey) !== "1") {
+  const savedModel = localStorage.getItem(modelStorageKey);
+  const savedManualModel = localStorage.getItem(manualModelStorageKey);
+  if (manualAllowed(savedManualModel)) manualModel = savedManualModel;
+  else if (savedManualModel !== null) localStorage.removeItem(manualModelStorageKey);
+  if (manualAllowed(savedModel)) manualModel = savedModel;
+  if (defaultModel === "auto" && localStorage.getItem(autoMigrationKey) !== "1") {
     // Earlier clients persisted the default Flash as if it were a manual
     // choice. Migrate once; every subsequent explicit choice remains intact.
     modelInput.value = "auto";
     localStorage.setItem(modelStorageKey, "auto");
-    localStorage.setItem(autoMigrationKey, "1");
   } else {
-    const savedModel = localStorage.getItem(modelStorageKey);
     if (allowedModels.has(savedModel)) modelInput.value = savedModel;
     else if (savedModel !== null) localStorage.removeItem(modelStorageKey);
   }
+  if (allowedModels.has("auto")) localStorage.setItem(autoMigrationKey, "1");
 } catch (_) {}
 sessionInput.value = session;
 let preferredModel = modelInput.value;
@@ -106,6 +145,7 @@ function updateControls() {
   busyMode = navigationBusy ? navigationMode : running() ? "chat" : "";
   activeBackend = running() ? sessionRuns.get(session).backend : "";
   updateConversationControls(); updateBackendControls();
+  syncProgress();
 }
 function setBusy(value, mode = "conversation") {
   const previousMode = navigationMode;
@@ -138,7 +178,7 @@ function updateConversationControls() {
   input.placeholder = running() ? "补充要求或调整方向…" : "说说你想完成什么…";
   document.getElementById("switch").disabled = navigationBusy;
   sessionInput.disabled = navigationBusy;
-  modelInput.disabled = busy || readonly;
+  syncRoutingControls();
   document.getElementById("conversation-new").disabled = navigationBusy;
   document.getElementById("conversation-retry").disabled = navigationBusy || conversationsLoading;
   document.getElementById("conversation-restore").disabled = busy;
@@ -568,6 +608,7 @@ async function refreshAgentStatus({ manual = false } = {}) {
 agentStatusRefresh.addEventListener("click", () => refreshAgentStatus({ manual: true }));
 agentStatusPanel.addEventListener("toggle", () => { if (agentStatusVisible()) refreshAgentStatus(); else pauseAgentStatus(); });
 document.addEventListener("visibilitychange", () => {
+  syncProgress();
   if (agentStatusVisible()) refreshAgentStatus(); else pauseAgentStatus();
   for (const feed of publicFeeds) feed.syncVisibility();
 });
@@ -642,19 +683,46 @@ async function loadBackends() {
   } catch (error) { backendsReady = false; backendError = error.message; updateBackendControls(); }
 }
 function showModel() {
+  syncRoutingControls();
   const provider = document.body.dataset.provider;
   const label = document.getElementById("model-label");
   label.textContent = modelInput.value === "auto" ? "自动选择（Decision）" : provider === "demo" ? "离线 Demo" : `${provider} · ${modelInput.value}`;
   label.title = label.textContent;
-  if (modelInput.value === "auto") document.getElementById("model-note").textContent = "每轮先判断任务复杂度，再选择模型；回复中显示实际模型和选择原因。手动选择模型可跳过分类。";
+  if (modelInput.value === "auto") document.getElementById("model-note").textContent = "每轮先判断任务复杂度，再选择模型；回复中显示实际模型和选择原因。关闭自动路由可手动选择模型。";
   else if (provider !== "demo") document.getElementById("model-note").textContent = `模型配置：${provider} / ${modelInput.value}`;
 }
-modelInput.addEventListener("change", () => {
-  if (busy || conversation?.archived || !allowedModels.has(modelInput.value)) return;
+function syncRoutingControls() {
+  const automatic = modelInput.value === "auto";
+  const locked = busy || conversation?.archived === true;
+  modelInput.disabled = locked || automatic;
+  routingToggle.checked = automatic;
+  routingToggle.disabled = locked || !allowedModels.has("auto");
+  routingHelp.textContent = !allowedModels.has("auto") ? "管理员尚未开放自动路由。"
+    : automatic ? "已开启：按问题复杂度选模型；选择仅保存在当前浏览器。"
+    : "已关闭：使用手动选择的模型；选择仅保存在当前浏览器。";
+}
+function saveModelChoice() {
   preferredModel = modelInput.value;
-  try { localStorage.setItem(modelStorageKey, modelInput.value); } catch (_) {}
+  if (manualAllowed(modelInput.value)) manualModel = modelInput.value;
+  try {
+    localStorage.setItem(modelStorageKey, modelInput.value);
+    localStorage.setItem(manualModelStorageKey, manualModel);
+  } catch (_) {}
   showModel();
+}
+modelInput.addEventListener("change", () => {
+  if (busy || conversation?.archived || !allowedModels.has(modelInput.value)) {
+    modelInput.value = preferredModel; showModel(); return;
+  }
+  saveModelChoice();
   setStatus(modelInput.value === "auto" ? "已选择自动路由 · 下一条消息先判断复杂度，再选择模型" : `已选择 ${modelInput.value} · 下一条消息使用此模型`);
+});
+routingToggle.addEventListener("change", () => {
+  if (busy || conversation?.archived || !allowedModels.has("auto")) { syncRoutingControls(); return; }
+  modelInput.value = routingToggle.checked ? "auto" : manualAllowed(manualModel) ? manualModel : defaultManualModel;
+  saveModelChoice();
+  setStatus(modelInput.value === "auto" ? "已开启自动路由 · 下一条消息先判断复杂度，再选择模型"
+    : `已关闭自动路由 · 下一条消息使用 ${modelInput.value}`);
 });
 showModel();
 function routingSummary(routing) {
@@ -718,6 +786,80 @@ async function api(path, options = {}) {
   if (!data || typeof data !== "object" || Array.isArray(data)) throw invalidResponse();
   if (!response.ok) throw Object.assign(new Error(typeof data.error === "string" && data.error ? data.error : `请求失败 (${response.status})`), { status: response.status });
   return data;
+}
+
+function acceptProgress(run, data) {
+  if (!data || !["running", "completed", "stopped", "failed", "unavailable"].includes(data.status)
+      || !Array.isArray(data.events) || data.events.length > 5) throw new Error("Invalid progress");
+  let previous = 0;
+  for (const item of data.events) {
+    if (!item || !Number.isSafeInteger(item.sequence) || item.sequence <= previous
+        || typeof item.text !== "string" || !item.text || item.text.length > 120) throw new Error("Invalid progress");
+    previous = item.sequence;
+  }
+  // A late snapshot must not replace a newer one, including the final response.
+  if (previous > (run.progress?.at(-1)?.sequence || 0)) {
+    run.progress = data.events.map(item => ({ sequence: item.sequence, text: item.text }));
+  }
+  run.progressNotice = data.status === "unavailable" ? "暂未取得进度，继续等待本轮回复。" : "";
+}
+function renderProgress() {
+  if (!progressPanel) return;
+  const run = sessionRuns.get(session);
+  progressPanel.hidden = navigationBusy || !run || !run.pending && !run.progress?.length;
+  progressPanel.open = run?.progressOpen === true;
+  const events = run?.progress || [];
+  const state = run?.pending ? events.at(-1)?.text || "等待处理进度…" : run?.error ? "本轮未完成" : "已完成";
+  document.getElementById("turn-progress-title").textContent = `处理进度 · ${state}`;
+  const list = document.getElementById("turn-progress-events");
+  const signature = events.map(item => item.sequence).join(",");
+  if (list.progressRun !== run || list.progressSignature !== signature) {
+    list.replaceChildren();
+    for (const item of events.slice(-5)) {
+      const row = document.createElement("li"); row.textContent = item.text; list.append(row);
+    }
+    list.progressRun = run; list.progressSignature = signature;
+  }
+  document.getElementById("turn-progress-note").textContent = (run?.pending && run.progressNotice)
+    || (events.length ? "仅保留本轮最近 5 条处理状态。" : "任务已提交，正在等待处理状态。");
+}
+progressPanel?.addEventListener("toggle", () => {
+  const run = sessionRuns.get(session);
+  if (run) run.progressOpen = progressPanel.open;
+});
+function syncProgress() {
+  renderProgress();
+  const run = sessionRuns.get(session);
+  const next = progressPanel && run?.pending && !run.progressDisabled && !navigationBusy
+    && currentView === "chat" && !document.hidden ? run : null;
+  if (progressRun !== next) {
+    clearTimeout(progressTimer); progressTimer = null;
+    progressRequest?.controller.abort(); progressRequest = null;
+    progressRun = next;
+  }
+  if (next && !progressRequest && progressTimer === null) {
+    const selected = session;
+    progressTimer = setTimeout(() => { progressTimer = null; pollProgress(selected, next); }, 1200);
+  }
+}
+async function pollProgress(selected, run) {
+  if (progressRun !== run || !run.pending) return;
+  const request = { controller: new AbortController() };
+  progressRequest = request;
+  const timeout = setTimeout(() => request.controller.abort(), 5000);
+  try {
+    const data = await api(`/api/chat/progress?session_id=${encodeURIComponent(selected)}&turn_id=${encodeURIComponent(run.turnId)}`,
+      { signal: request.controller.signal });
+    if (progressRequest !== request || !run.pending) return;
+    acceptProgress(run, data);
+  } catch (error) {
+    if (progressRequest !== request || !run.pending) return;
+    run.progressNotice = "进度暂时无法更新，继续等待本轮回复。";
+    if ([401, 403, 404].includes(error.status)) run.progressDisabled = true;
+  } finally {
+    clearTimeout(timeout);
+    if (progressRequest === request) { progressRequest = null; syncProgress(); }
+  }
 }
 async function readHistory(selected) {
   historyTarget = selected;
@@ -834,6 +976,7 @@ async function sendMessage(text) {
   if (!configuredBackends.has(selectedBackend)) { setStatus("所选 Agent 已移除，请手动选择其他 Agent", true); return; }
   if (!allowedModels.has(selectedModel)) { setStatus("所选模型不可用，请刷新页面后选择", true); return; }
   const run = {
+    progress: [], progressOpen: false,
     turnId: requestIdentifier(), steering: new Map(), steerSending: false,
     delivery: !routesToJoyAgent && selectedBackend === "joyagent" ? "next_step" : "next_turn",
     draftRevision: draftRevisions.get(selectedSession) || 0,
@@ -848,6 +991,7 @@ async function sendMessage(text) {
   try {
     const data = await api("/api/chat", { method: "POST", body: JSON.stringify({ message: text, session_id: selectedSession, model: selectedModel, backend: selectedBackend, turn_id: run.turnId }) });
     if (deletedConversations.has(selectedSession) || sessionRuns.get(selectedSession) !== run) return;
+    if (data.progress) { try { acceptProgress(run, data.progress); } catch (_) {} }
     const events = data.tool_events || [];
     const continued = Number(data.steps) > 0 && Array.isArray(data.steering) && data.steering.length > 0;
     const directOnly = routesToJoyAgent && !continued;
@@ -1129,7 +1273,8 @@ function selectView(value) {
     tab.setAttribute("aria-selected", String(selected)); tab.tabIndex = selected ? 0 : -1;
     document.getElementById(`${view}-view`).hidden = !selected;
   }
-  document.getElementById("chat-sidebar").hidden = value !== "chat";
+  updateSidebar();
+  syncProgress();
   if (value === "chat") refreshAgentStatus(); else pauseAgentStatus();
   for (const feed of publicFeeds) feed.syncVisibility();
 }
