@@ -16,7 +16,7 @@ from .tools import ToolRegistry
 from .types import ProviderError, ToolSpec
 
 
-DEFAULT_BASE_URL = "https://maas.qianwenaiapi.com/compatible-mode/v1"
+DEFAULT_BASE_URL = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
 DEFAULT_MODEL = "decision-model-preview"
 MAX_PAYLOAD_BYTES = 64 * 1024
 MAX_QUESTIONS = 16
@@ -30,7 +30,7 @@ def _settings(raw: dict[str, Any], root: Path | None = None) -> dict[str, Any]:
         raise ValueError("decision.enabled 必须是布尔值。")
     result = {"base_url": raw.get("base_url", DEFAULT_BASE_URL),
               "model": raw.get("model", DEFAULT_MODEL),
-              "api_key_env": raw.get("api_key_env", "QWENCLOUD_API_KEY"),
+              "api_key_env": raw.get("api_key_env", "BAILIAN_TOKEN_PLAN_API_KEY"),
               "credentials_file": raw.get("credentials_file"),
               "timeout_seconds": raw.get("timeout_seconds", 15)}
     if not isinstance(result["base_url"], str) or not result["base_url"].strip():
